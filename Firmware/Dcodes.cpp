@@ -425,6 +425,7 @@ const char* dcode_9_ADC_name(uint8_t i)
 
 extern int current_temperature_raw[EXTRUDERS];
 extern int current_temperature_bed_raw;
+extern int current_temperature_bed2_raw;
 extern int current_temperature_raw_pinda;
 
 #ifdef AMBIENT_THERMISTOR
@@ -456,6 +457,7 @@ uint16_t dcode_9_ADC_val(uint8_t i)
 #ifdef VOLT_BED_PIN
 	case 6: return current_voltage_raw_bed;
 #endif //VOLT_BED_PIN
+	case 7: return current_temperature_bed2_raw;
 	}
 	return 0;
 }

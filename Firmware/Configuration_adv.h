@@ -424,6 +424,12 @@ const unsigned int dropsegments=5; //everything with less than this number of st
   #define THERMISTORBED TEMP_SENSOR_BED
   #define BED_USES_THERMISTOR
 #endif
+
+#if TEMP_SENSOR_BED2 > 0
+#define THERMISTORBED2 TEMP_SENSOR_BED2
+#define BED2_USES_THERMISTOR
+#endif
+
 #if TEMP_SENSOR_PINDA > 0
   #define THERMISTORPINDA TEMP_SENSOR_PINDA
 #endif
@@ -441,6 +447,9 @@ const unsigned int dropsegments=5; //everything with less than this number of st
 #endif
 #if TEMP_SENSOR_BED == -1
   #define BED_USES_AD595
+#endif
+#if TEMP_SENSOR_BED2 == -1
+#define BED_USES_AD595
 #endif
 #if TEMP_SENSOR_0 == -2
   #define HEATER_0_USES_MAX6675

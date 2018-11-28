@@ -1565,6 +1565,7 @@ void setup()
       manage_heater(); // Update temperatures 
 #ifdef DEBUG_UVLO_AUTOMATIC_RECOVER 
 		printf_P(_N("Power panic detected!\nCurrent bed temp:%d\nSaved bed temp:%d\n"), (int)degBed(), eeprom_read_byte((uint8_t*)EEPROM_UVLO_TARGET_BED))
+			printf_P(_N("Power panic detected!\nCurrent bed temp:%d\nSaved bed2 temp:%d\n"), (int)degBed2(), eeprom_read_byte((uint8_t*)EEPROM_UVLO_TARGET_BED2))
 #endif 
      if ( degBed() > ( (float)eeprom_read_byte((uint8_t*)EEPROM_UVLO_TARGET_BED) - AUTOMATIC_UVLO_BED_TEMP_OFFSET) ){ 
           #ifdef DEBUG_UVLO_AUTOMATIC_RECOVER 
@@ -1585,10 +1586,29 @@ void setup()
           } 
            
       }
+       if (degBed2() > ((float)eeprom_read_byte((uint8_t*)EEPROM_UVLO_TARGET_BED2) - AUTOMATIC_UVLO_BED_TEMP_OFFSET)) {
+#ifdef DEBUG_UVLO_AUTOMATIC_RECOVER 
+    puts_P(_N("Automatic recovery!"));
+#endif 
+    recover_print(1);
+  }
+  else {
+#ifdef DEBUG_UVLO_AUTOMATIC_RECOVER 
+    puts_P(_N("Normal recovery!"));
+#endif 
+    if (lcd_show_fullscreen_message_yes_no_and_wait_P(_T(MSG_RECOVER_PRINT), false)) recover_print(0);
+    else {
+      eeprom_update_byte((uint8_t*)EEPROM_UVLO, 0);
+      lcd_update_enable(true);
+      lcd_update(2);
+      lcd_setstatuspgm(_T(WELCOME_MSG));
+    }
 
-	   
+  }	   
   }
 #endif //UVLO_SUPPORT
+
+ 
 
   KEEPALIVE_STATE(NOT_BUSY);
 #ifdef WATCHDOG
@@ -4177,6 +4197,10 @@ if((eSoundMode==e_SOUND_MODE_LOUD)||(eSoundMode==e_SOUND_MODE_ONCE))
 			delay_keep_alive(1000);
 			serialecho_temperatures();
 		}
+		while (abs(degBed2() - PINDA_MIN_T) > 1) {
+			delay_keep_alive(1000);
+			serialecho_temperatures();
+		}
 		
 		//enquecommand_P(PSTR("M190 S50"));
 		for (int i = 0; i < PINDA_HEAT_T; i++) {
@@ -4210,6 +4234,10 @@ if((eSoundMode==e_SOUND_MODE_LOUD)||(eSoundMode==e_SOUND_MODE_ONCE))
 			plan_buffer_line(current_position[X_AXIS], current_position[Y_AXIS], current_position[Z_AXIS], current_position[E_AXIS], 3000 / 60, active_extruder);
 			st_synchronize();
 			while (degBed() < t_c) {
+				delay_keep_alive(1000);
+				serialecho_temperatures();
+			}
+			while (degBed2() < t_c) {
 				delay_keep_alive(1000);
 				serialecho_temperatures();
 			}
@@ -4345,7 +4373,7 @@ if((eSoundMode==e_SOUND_MODE_LOUD)||(eSoundMode==e_SOUND_MODE_ONCE))
 #endif //PINDA_THERMISTOR
 
 		if (temp_comp_start)
-		if (run == false && temp_cal_active == true && calibration_status_pinda() == true && target_temperature_bed >= 50) {
+		if (run == false && temp_cal_active == true && calibration_status_pinda() == true && target_temperature_bed >= 50 == true && target_temperature_bed2 >= 50) {
 			if (lcd_commands_type != LCD_COMMAND_STOP_PRINT) {
 				temp_compensation_start();
 				run = true;
@@ -4612,7 +4640,7 @@ if((eSoundMode==e_SOUND_MODE_LOUD)||(eSoundMode==e_SOUND_MODE_ONCE))
 		go_home_with_z_lift();
 //		SERIAL_ECHOLNPGM("Go home finished");
 		//unretract (after PINDA preheat retraction)
-		if (degHotend(active_extruder) > EXTRUDE_MINTEMP && temp_cal_active == true && calibration_status_pinda() == true && target_temperature_bed >= 50) {
+		if (degHotend(active_extruder) > EXTRUDE_MINTEMP && temp_cal_active == true && calibration_status_pinda() == true && target_temperature_bed >= 50 == true && target_temperature_bed2 >= 50) {
 			current_position[E_AXIS] += default_retraction;
 			plan_buffer_line(current_position[X_AXIS], current_position[Y_AXIS], current_position[Z_AXIS], current_position[E_AXIS], 400, active_extruder);
 		}
@@ -5473,9 +5501,9 @@ Sigma_Exit:
           #endif
 		  #if defined(TEMP_BED2_PIN) && TEMP_BED2_PIN > -1
 			SERIAL_PROTOCOLPGM("    ADC B2:");
-			SERIAL_PROTOCOL_F(degBed(), 1);
+			SERIAL_PROTOCOL_F(degBed2(), 1);
 			SERIAL_PROTOCOLPGM("C->");
-			raw = rawBedTemp();
+			raw = rawBedTemp2();
 			SERIAL_PROTOCOL_F(raw / OVERSAMPLENR, 5);
 			SERIAL_PROTOCOLPGM(" Rb->");
 			SERIAL_PROTOCOL_F(100 * (1 + (PtA * (raw / OVERSAMPLENR)) + (PtB * sq((raw / OVERSAMPLENR)))), 5);
@@ -5605,6 +5633,54 @@ Sigma_Exit:
         previous_millis_cmd = millis();
     #endif
         break;
+#if defined(TEMP_BED2_PIN) && TEMP_BED2_PIN > -1
+		LCD_MESSAGERPGM(_T(MSG_BED_HEATING));
+		heating_status = 3;
+		if (farm_mode) { prusa_statistics(1); };
+		if (code_seen('S'))
+		{
+			setTargetBed(code_value());
+			CooldownNoWait = true;
+		}
+		else if (code_seen('R'))
+		{
+			setTargetBed(code_value());
+			CooldownNoWait = false;
+		}
+		codenum = millis();
+
+		cancel_heatup = false;
+		target_direction = isHeatingBed(); // true if heating, false if cooling
+
+		KEEPALIVE_STATE(NOT_BUSY);
+		while ((target_direction) && (!cancel_heatup) ? (isHeatingBed()) : (isCoolingBed() && (CooldownNoWait == false)))
+		{
+			if ((millis() - codenum) > 1000) //Print Temp Reading every 1 second while heating up.
+			{
+				if (!farm_mode) {
+					float tt = degHotend(active_extruder);
+					SERIAL_PROTOCOLPGM("T:");
+					SERIAL_PROTOCOL(tt);
+					SERIAL_PROTOCOLPGM(" E:");
+					SERIAL_PROTOCOL((int)active_extruder);
+					SERIAL_PROTOCOLPGM(" B2:");
+					SERIAL_PROTOCOL_F(degBed2(), 1);
+					SERIAL_PROTOCOLLN("");
+				}
+				codenum = millis();
+
+			}
+			manage_heater();
+			manage_inactivity();
+			lcd_update(0);
+		}
+		LCD_MESSAGERPGM(_T(MSG_BED_DONE));
+		KEEPALIVE_STATE(IN_HANDLER);
+		heating_status = 4;
+
+		previous_millis_cmd = millis();
+#endif
+		break;
 
     #if defined(FAN_PIN) && FAN_PIN > -1
       case 106: //!M106 Sxxx Fan On S<speed> 0 .. 255
@@ -7324,7 +7400,7 @@ void controllerFan()
   {
     lastMotorCheck = millis();
 
-    if(!READ(X_ENABLE_PIN) || !READ(Y_ENABLE_PIN) || !READ(Z_ENABLE_PIN) || (soft_pwm_bed > 0)
+    if(!READ(X_ENABLE_PIN) || !READ(Y_ENABLE_PIN) || !READ(Z_ENABLE_PIN) || (soft_pwm_bed > 0) || (soft_pwm_bed2 > 0)
     #if EXTRUDERS > 2
        || !READ(E2_ENABLE_PIN)
     #endif
@@ -8093,7 +8169,7 @@ void temp_compensation_start() {
 	plan_buffer_line(current_position[X_AXIS], current_position[Y_AXIS], current_position[Z_AXIS], current_position[E_AXIS], 3000 / 60, active_extruder);
 	st_synchronize();
 	while (fabs(degBed() - target_temperature_bed) > 1) delay_keep_alive(1000);
-	while (fabs(degBed() - target_temperature_bed2) > 1) delay_keep_alive(1000);
+	while (fabs(degBed2() - target_temperature_bed2) > 1) delay_keep_alive(1000);
 
 	for (int i = 0; i < PINDA_HEAT_T; i++) {
 		delay_keep_alive(1000);
@@ -8118,6 +8194,15 @@ void temp_compensation_apply() {
 		}else {
 			//interpolation
 			z_shift_mm = temp_comp_interpolation(target_temperature_bed) / cs.axis_steps_per_unit[Z_AXIS];
+		}
+		if (target_temperature_bed2 % 10 == 0 && target_temperature_bed2 >= 60 && target_temperature_bed2 <= 100) {
+			i_add = (target_temperature_bed2 - 60) / 10;
+			EEPROM_read_B(EEPROM_PROBE_TEMP_SHIFT + i_add * 2, &z_shift);
+			z_shift_mm = z_shift / cs.axis_steps_per_unit[Z_AXIS];
+		}
+		else {
+			//interpolation
+			z_shift_mm = temp_comp_interpolation(target_temperature_bed2) / cs.axis_steps_per_unit[Z_AXIS];
 		}
 		printf_P(_N("\nZ shift applied:%.3f\n"), z_shift_mm);
 		plan_buffer_line(current_position[X_AXIS], current_position[Y_AXIS], current_position[Z_AXIS] - z_shift_mm, current_position[E_AXIS], homing_feedrate[Z_AXIS] / 40, active_extruder);
@@ -8239,6 +8324,9 @@ void serialecho_temperatures() {
 	SERIAL_PROTOCOLPGM(" B:");
 	SERIAL_PROTOCOL_F(degBed(), 1);
 	SERIAL_PROTOCOLLN("");
+	SERIAL_PROTOCOLPGM(" B2:");
+	SERIAL_PROTOCOL_F(degBed2(), 1);
+	SERIAL_PROTOCOLLN("");
 }
 
 extern uint32_t sdpos_atomic;
@@ -8355,6 +8443,7 @@ void uvlo_()
     EEPROM_save_B(EEPROM_UVLO_FEEDRATE, &feedrate_bckp);
     eeprom_update_byte((uint8_t*)EEPROM_UVLO_TARGET_HOTEND, target_temperature[active_extruder]);
     eeprom_update_byte((uint8_t*)EEPROM_UVLO_TARGET_BED, target_temperature_bed);
+	eeprom_update_byte((uint8_t*)EEPROM_UVLO_TARGET_BED2, target_temperature_bed2);
     eeprom_update_byte((uint8_t*)EEPROM_UVLO_FAN_SPEED, fanSpeed);
 	eeprom_update_float((float*)(EEPROM_EXTRUDER_MULTIPLIER_0), extruder_multiplier[0]);
 #if EXTRUDERS > 1
@@ -8515,6 +8604,8 @@ void recover_print(uint8_t automatic) {
 	enquecommand(cmd);
 	sprintf_P(cmd, PSTR("M190 S%d"), target_temperature_bed);
 	enquecommand(cmd);
+	sprintf_P(cmd, PSTR("M190 S%d"), target_temperature_bed2);
+	enquecommand(cmd);
 	enquecommand_P(PSTR("M83")); //E axis relative mode
 	//enquecommand_P(PSTR("G1 E5 F120")); //Extrude some filament to stabilize pessure
     // If not automatically recoreverd (long power loss), extrude extra filament to stabilize 
@@ -8597,6 +8688,7 @@ void recover_machine_state_after_power_panic(bool bTiny)
   // 7) Recover the target temperatures.
   target_temperature[active_extruder] = eeprom_read_byte((uint8_t*)EEPROM_UVLO_TARGET_HOTEND);
   target_temperature_bed = eeprom_read_byte((uint8_t*)EEPROM_UVLO_TARGET_BED);
+  target_temperature_bed2 = eeprom_read_byte((uint8_t*)EEPROM_UVLO_TARGET_BED2);
 
   // 8) Recover extruder multipilers
   extruder_multiplier[0] = eeprom_read_float((float*)(EEPROM_EXTRUDER_MULTIPLIER_0));

@@ -359,7 +359,7 @@ static void temp_runaway_stop(bool isPreheat, bool isBed);
           }
           if (extruder<0){
             soft_pwm_bed = (bias + d) >> 1;
-			      soft_pwm_bed2 = (bias2 + d2) >> 1;
+			soft_pwm_bed2 = (bias2 + d2) >> 1;
         }
           else
           {
@@ -844,6 +844,7 @@ void manage_heater()
       }
     #endif
   #endif
+
 #if TEMP_SENSOR_BED2 != 0
 
 #ifdef PIDTEMPBED
@@ -887,7 +888,7 @@ void manage_heater()
 		  soft_pwm_bed2 = 0;
 	  }
 
-#elif !defined(BED_LIMIT_SWITCHING)
+#elif !defined(BED2_LIMIT_SWITCHING)
 	  // Check if temperature is within the correct range
 	  if ((current_temperature_bed2 > BED2_MINTEMP) && (current_temperature_bed2 < BED2_MAXTEMP))
 	  {
@@ -1580,6 +1581,7 @@ void bed_min_temp_error(void) {
     Stop();
 #endif
 }
+
 void bed2_max_temp_error(void) {
 #if HEATER_BED2_PIN > -1
 	WRITE(HEATER_BED2_PIN, 0);
@@ -2131,9 +2133,9 @@ void check_max_temp()
 
 #if defined(BED2_MAXTEMP) && (TEMP_SENSOR_BED2 != 0)
 #if HEATER_BED2_RAW_LO_TEMP > HEATER_BED2_RAW_HI_TEMP
-if (current_temperature_bed2_raw <= bed_maxttemp_raw) {
+	if (current_temperature_bed2_raw <= bed2_maxttemp_raw) {
 #else
-if (current_temperature_bed2_raw >= bed_maxttemp_raw) {
+	if (current_temperature_bed2_raw >= bed2_maxttemp_raw) {
 #endif
 	target_temperature_bed2 = 0;
 	bed2_max_temp_error();
@@ -2167,9 +2169,9 @@ void check_min_temp_bed()
 void check_min_temp_bed2()
 {
 #if HEATER_BED2_RAW_LO_TEMP > HEATER_BED2_RAW_HI_TEMP
-	if (current_temperature_bed2_raw >= bed_minttemp_raw) {
+	if (current_temperature_bed2_raw >= bed2_minttemp_raw) {
 #else
-	if (current_temperature_bed2_raw <= bed_minttemp_raw) {
+	if (current_temperature_bed2_raw <= bed2_minttemp_raw) {
 #endif
 		bed2_min_temp_error();
 	}

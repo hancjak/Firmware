@@ -554,6 +554,13 @@
 #else
 #define TEMP_SENSOR_BED 1
 #endif
+#if defined(E3D_PT100_BED_WITH_AMP)
+#define TEMP_SENSOR_BED2 247
+#elif defined(E3D_PT100_BED_NO_AMP)
+#define TEMP_SENSOR_BED2 148
+#else
+#define TEMP_SENSOR_BED2 1
+#endif
 #define TEMP_SENSOR_PINDA 1
 #define TEMP_SENSOR_AMBIENT 2000
 
